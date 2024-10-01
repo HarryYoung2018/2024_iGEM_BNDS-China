@@ -97,7 +97,7 @@ for p in user_promoters:
     print(p)
 
 user_structures = get_structures_inputs()
-print("You have entered the following structures:")
+print("You have entered the following segments:")
 for p in user_structures:
     print(p)
 
@@ -109,7 +109,7 @@ for key, value in user_relations.items():
 
 n = (len(user_promoters) + len(user_proteins)) * 2 # Number of variables * 2 = Sum of number of proteins and promoters * 2
 y0 = np.zeros(n)  # Initial conditions for n variables
-t = np.linspace(0, 10, 10000)  # Time points
+t = np.linspace(0, 1, 10000)  # Time points
 
 
 # Solve the system
