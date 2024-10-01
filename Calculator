@@ -1,0 +1,136 @@
+import numpy as np
+from scipy.integrate import odeint
+import matplotlib.pyplot as plt
+
+def get_protein_inputs():
+    proteins = input(f"Enter the names of proteins (comma-separated): ")
+    proteins = list(map(str, proteins.split(',')))
+    for i in range(len(proteins)):
+        parameters[proteins[i]] = [0.6, 0.7, 0, 1, 0.6, 0.3] # alpha, beta, y_min, y_max, K, n
+    return proteins
+
+def get_promoters_inputs():
+    promoters = input(f"Enter the names of promoters (comma-separated): ")
+    promoters = list(map(str, promoters.split(',')))
+    for i in range(len(promoters)):
+        parameters[promoters[i]] = [1, 1, 0, 1, 0.2, 1] # alpha, beta, y_min, y_max, K, n
+    return promoters
+
+def get_structures_inputs():
+    structures = []
+    n = int(input(f"Enter the number of segments you have: "))
+    for i in range(n):
+        structure = input(f"Enter segment {i + 1} of the circuit (comma-separated): ")
+        structure = list(map(str, structure.split(',')))
+        structures.append(structure)
+    return structures
+
+def get_relations_inputs():
+    # Create an empty dictionary
+    relations_map = {}
+    n = int(input(f"Enter the number of relations you have: "))
+    for i in range(n):
+        R = input(f"Enter the a relation in the format of A (start of relation), relation ('1' is stimulate, '2' is repress), B (end of relation): ")
+        R = list(map(str, R.split(',')))
+        name = input("Enter a name for this relation (For example 'react_1'): ")
+        relations_map[name] = R
+    return relations_map
+
+# Define a function for the derivatives
+def model(y, t):
+    N = len(y)  # Number of variables
+    dydt = np.zeros(N)
+    parts_map = {} # Name -> number
+    current_number = 0
+    for i in range(0, len(user_structures)):
+        current_structure = user_structures[i]
+        current_part = 0
+        constant_rate = 0.8
+        death_rate = 0.5
+        growth_rate = 0.6
+        while current_part < len(current_structure):
+            alpha, beta, y_min, y_max, K, n = parameters[current_structure[current_part]]
+            parts_map[current_structure[current_part]] = current_number
+            if current_part == 0:
+                promoter_number = current_number
+                dydt[current_number] = constant_rate - death_rate * y[current_number] # assume promoters work at a constant rate
+                #dydt[current_number + N//2] = constant_rate - death_rate * y[current_number + N//2]
+            else:
+                dydt[current_number] = alpha * y[promoter_number] - beta * y[current_number] # protiens that are connected after the promoters grow by a rate proportional to the concentration of the promoters
+                dydt[current_number + N//2] = alpha * y[promoter_number] - beta * y[current_number + N//2] # the plus N/2 in the second bracket might go wrong
+            current_number += 1
+            current_part += 1
+    for key, value in user_relations.items():
+        current_relation = value # [A, relation, B]
+        A = parts_map[current_relation[0]] # serial number
+        relation = current_relation[1]
+        if relation == '2': #repress
+            if user_relations.get(current_relation[2]) is None: # B is not a relation, it might be a promoter or a protein
+                alpha, beta, y_min, y_max, K, n = parameters[current_relation[2]]
+                B = parts_map[current_relation[2]] 
+                dydt[B] = dydt[B + N//2] = alpha * (y_min + (y_max - y_min) * ((K**n) / (K**n + y[A + N//2]**n))) - beta * y[B]
+            else: # B is a relation, then the current relation affects the amount of effective concentration of the repressor in relation B
+                alpha, beta, y_min, y_max, K, n = parameters[user_relations[current_relation[2]][0]]
+                B = parts_map[user_relations[current_relation[2]][0]] 
+                dydt[B + N//2] = alpha * (y_min + (y_max - y_min) * ((K**n) / (K**n + y[A + N//2]**n))) - beta * y[B + N//2]
+        else: #stimulate
+            if user_relations.get(current_relation[2]) is None: # B is not a relation, it might be a promoter or a protein
+                alpha, beta, y_min, y_max, K, n = parameters[current_relation[2]]
+                B = parts_map[current_relation[2]] 
+                dydt[B] = dydt[B + N//2] = alpha * y[A + N//2] - beta * y[B]
+            else: # B is a relation, then the current relation affects the amount of effective concentration of the repressor in relation B
+                alpha, beta, y_min, y_max, K, n = parameters[user_relations[current_relation[2]][0]]
+                B = parts_map[user_relations[current_relation[2]][0]] 
+                dydt[B + N//2] = alpha * y[A + N//2] - beta * y[B + N//2]
+    return dydt
+
+parameters = {}
+# Run the function and print the collected proteins
+user_proteins = get_protein_inputs()
+print("You have entered the following proteins:")
+for p in user_proteins:
+    print(p)
+
+user_promoters = get_promoters_inputs()
+print("You have entered the following promoters:")
+for p in user_promoters:
+    print(p)
+
+user_structures = get_structures_inputs()
+print("You have entered the following structures:")
+for p in user_structures:
+    print(p)
+
+rates = {}
+user_relations = get_relations_inputs()
+print("You have entered the following relations:")
+for key, value in user_relations.items():
+    print(key,":",value)
+
+n = (len(user_promoters) + len(user_proteins)) * 2 # Number of variables * 2 = Sum of number of proteins and promoters * 2
+y0 = np.zeros(n)  # Initial conditions for n variables
+t = np.linspace(0, 10, 10000)  # Time points
+
+
+# Solve the system
+solution = odeint(model, y0, t)
+max_value = max(max(row) for row in solution)
+cnt = 0
+import matplotlib.pyplot as plt
+
+# Define the number of rows and columns for subplots
+num_vars = len(user_structures) * max(len(us) for us in user_structures)
+fig, axes = plt.subplots(num_vars, 1, sharex=True, sharey=True, figsize=(10, num_vars * 2))
+colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+cnt = 0
+for i in range(len(user_structures)):
+    for j in range(len(user_structures[i])):
+        axes[cnt].plot(t, solution[:, cnt]/max_value, label=f'{user_structures[i][j]}', color=colors[cnt % len(colors)])
+        axes[cnt].set_title(f'Variable: {user_structures[i][j]}')
+        axes[cnt].legend()
+        cnt += 1
+
+plt.xlabel('Time')
+plt.ylabel('Value')
+plt.tight_layout()  # Adjust spacing between subplots
+plt.show()
