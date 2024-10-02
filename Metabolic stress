@@ -1,0 +1,86 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from scipy.integrate import odeint
+
+# Function to define the differential equations
+def model(y, t, params, n):
+    dydt = np.zeros(n)
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                if i in K_m:
+                    K = K_m[i]
+                    v = v_max[i]
+                    dydt[i] -= v * y[i] / (K + y[i])
+                    dydt[j] += v * y[i] / (K + y[i])
+                else:
+                    k_f = params[i][j]  # Forward rate constant
+                    dydt[i] -= k_f * y[i] * y[j]   
+                    dydt[j] += k_f * y[i] * y[j] 
+        
+    return dydt
+
+# Input for the number of proteins
+n = int(input("Enter the number of proteins: "))
+name = input("Enter the names of proteins (comma-separated): ")
+name = list(map(str, name.split(',')))
+# Input for initial concentrations
+initial_concentrations = input(f"Enter initial concentrations of {n} proteins (comma-separated): ")
+initial_concentrations = list(map(float, initial_concentrations.split(',')))
+
+# Input for rate constants as a 2D array
+print(f"Enter the rate constants (the number on the ith row and jth column is the rate that protein i transfers to protein j, if i does not transfer to j input '0') in a {n}x{n} format (comma-separated rows):")
+params = []
+for i in range(n):
+    row = input(f"Row {i + 1}: ")
+    params.append(list(map(float, row.split(','))))
+
+params = np.array(params)
+
+print(f"Enter the number of proteins that are added enzyme")
+m = int(input())
+K_m = {}
+v_max = {}
+
+if m > 0:
+    arr = input(f"Enter the serial number of the {m} proteins (comma-separated): ")
+    arr = list(map(float, arr.split(',')))
+    added_enzymes = arr
+    
+    arr = input(f"Enter the Michaelis constants of the {m} proteins (comma-separated): ")
+    arr = list(map(float, arr.split(',')))
+    
+    for i in range(m):
+        K_m[added_enzymes[i]] = arr[i]
+
+    arr = input(f"Enter the maximum rate achieved by the system of the {m} proteins (comma-separated): ")
+    arr = list(map(float, arr.split(',')))
+   
+    for i in range(m):
+        v_max[added_enzymes[i]] = arr[i]
+
+# Time points to evaluate
+t = np.linspace(0, 15, 10000)
+
+# Solve ODE
+y0 = initial_concentrations
+solution = odeint(model, y0, t, args=(params, n))
+
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+
+for i in range(len(solution[0])):
+    ax2.plot(t, solution[:,i], label=f'[{name[i]}]')
+    #plt.plot(t, solution[:,i], label=f'[{name[i]}]')
+
+ax1.set_xlabel('Time/h', color = 'black')
+ax1.set_ylabel('[Product] (mM)', color='black')
+ax1.tick_params(axis='y', labelcolor='black')
+ax1.set_ylim(0, 100)  # Adjust as needed
+ax2.set_ylabel('Growth (OD600)', color='black')
+ax2.tick_params(axis='y', labelcolor='black')
+ax2.set_ylim(0, 1.2)  # Adjust as needed
+ax2.legend(loc='upper left')
+
+plt.show()
